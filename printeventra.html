@@ -1,0 +1,781 @@
+
+<html>
+<head>
+<link rel="stylesheet" type="text/css" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/themes/smoothness/jquery-ui.css">
+<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+<script type="text/javascript" src=" https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js"></script>
+<script type="text/javascript" src=" https://www.2ndnewhawscouts.org.uk/osmr/vfs_fonts.js"></script>
+<script type="text/javascript" src=" https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.33/pdfmake.js"></script>
+<script type="text/javascript" src=" https://www.2ndnewhawscouts.org.uk/osmr/vfs_fonts.js"></script>
+<script type="text/javascript" src=" https://cdn.jsdelivr.net/npm/html-to-pdfmake/docs/browser.js"></script>
+<style>
+   table, th, td {
+  border: 1px solid black;
+}
+  .osmr_toolbar { background: #4D2177; padding: 20px; color: white; font-family: sans-serif; }
+  .osmr_builder {font-family: sans-serif; }
+  .extra { width: 100%; padding: 2px; }
+  
+  </style>
+ <script>
+var osmrelay = "https://www.2ndnewhawscouts.org.uk/osmr/osmrelay2.php";
+var security = new Object();
+var logged_on = false;
+var access_ok  = false;
+
+security = null;
+
+    $( function() {
+
+    $("#osmr_loggedon").toggle();
+    $(".osmr_builder").toggle();
+    $(".section-select").change(function() {update_terms()});
+    $(".term-select").change(function() {update_events()});
+    $(".field-select").change(function() {update_field()});
+  } );
+function update_events() {	
+get_api_osm();
+}
+
+function update_events2() {
+var section_id = $(".section-select").val();
+var term_id = $(".term-select").val();
+if (access_ok) {
+url = "https://www.onlinescoutmanager.co.uk/ext/events/summary/?action=get&sectionid="+section_id+"&termid="+term_id
+do_xhr(url,update_event_list,"");
+} else {update_event_list("{}")}
+}
+
+function update_event_list(text) {
+var event_config = JSON.parse(text);
+$(".event-select option").remove();
+$(".field-select option").remove();
+//$("select.event-select").append("<option value=\"-1\">Whole Section</option>");
+for(property=0; property<event_config.items.length; property++) {
+       $("select.event-select").append("<option value=\""+event_config.items[property].eventid+"\">"+event_config.items[property].name+"</option>");
+ }
+} 
+
+function update_terms(){
+	$(".term-select option").remove();
+$(".event-select option").remove();
+var section_id = $(".section-select").val();
+for(var property in terms_config[section_id]) {
+       $("select.term-select").append("<option value=\""+terms_config[section_id][property].termid+"\">"+terms_config[section_id][property].name+"</option>");
+ }
+$("select.term-select").val(terms_config[section_id][terms_config[section_id].length-1].termid);
+update_events();
+}
+  
+
+  
+function do_xhr_post(url,f,p) {
+var osmpath = url.substring(37,url.indexOf("?"));
+url = osmrelay +"?osmpath="+osmpath+"&"+url.substring(url.indexOf("?")+1,1000);
+
+if (security !== null ) {
+p['secret'] = security.secret;
+p['userid'] = security.userid;
+}
+
+
+var obj = $.extend({}, p);
+$.ajax({
+			url: url,
+			type: 'POST',
+			data: $.param(obj),
+			success: function(data,status){f(data);},
+                        error: function (responseData, textStatus, errorThrown) {
+        alert('POST failed.'); }
+		});
+}
+
+
+function do_xhr(url,f,p) {
+var osmpath = url.substring(37,url.indexOf("?"));
+url = osmrelay +"?osmpath="+osmpath+"&"+url.substring(url.indexOf("?")+1,1000);
+p2 = [];
+if (security !== null ) {
+p2['secret'] = security.secret;
+p2['userid'] = security.userid;
+}
+
+
+var obj = $.extend({}, p2);
+ $.post(url,$.param(obj),function(data,status){
+            f(data);
+        });
+
+}
+
+function get_sections(text) {
+
+  security = JSON.parse(text);
+  if (security.secret == null)
+  {
+    alert("Cannot Logon");
+    logged_on = false;   
+  } else
+  {
+    logged_on = true;
+  }
+if (($("#osmr_logon").is(":visible"))&&(logged_on==true)) { 
+$("#osmr_logon").toggle("slow");
+$("#osmr_loggedon").toggle("slow");
+}
+
+if (($("#osmr_loggedon").is(":visible"))&&(logged_on==false)) { 
+$("#osmr_loggedon").toggle("slow");
+$("#osmr_logon").toggle("slow");
+}
+if (($("#osmr_builder").is(":visible"))&&(logged_on==false)) { 
+$(".osmr_builder").toggle();
+}
+if (($("#osmr_builder").not(":visible"))&&(logged_on==true)) { 
+$(".osmr_builder").toggle();
+}
+if(logged_on==true) { 
+do_xhr('https://www.onlinescoutmanager.co.uk/api.php?action=getSectionConfig',set_sections,"");
+}
+}
+
+function set_sections(text) {
+ sections = text;
+ section_config = JSON.parse(sections);
+ do_xhr('https://www.onlinescoutmanager.co.uk/api.php?action=getTerms',set_terms,"");
+}
+
+function set_terms(text) {
+ terms = text;
+ do_xhr('https://www.onlinescoutmanager.co.uk/api.php?action=getUserRoles',set_roles,"");
+}
+
+function set_roles(text) {
+ roles = text;
+ roles_config = JSON.parse(roles);
+ terms_config = JSON.parse(terms);
+$(".section-select option").remove();
+ for(var property in section_config) {
+       $("select.section-select").append("<option value=\""+property+"\">"+roles_config[get_roles_section(property)].groupname+":"+roles_config[get_roles_section(property)].sectionname+"</option>");
+ }
+update_terms();
+}
+
+function get_roles_section(section) {
+var property;
+for(property in roles_config) {
+if (roles_config[property].sectionid == section) {
+        return property;
+    }
+}
+}
+
+function call_report() {
+ var parameters = [];
+
+  parameters['email'] = $("#username").val();
+  parameters['password'] = $("#password").val();
+do_xhr_post('https://www.onlinescoutmanager.co.uk/users.php?action=authorise',get_sections,parameters);
+
+}
+
+
+
+function get_api_osm()
+{
+var url = 'https://www.2ndnewhawscouts.org.uk/osmr/osmrelay.php?osmpath=ext/settings/access/&action=getAPIAccess&sectionid='+$(".section-select").val();
+do_xhr(url,update_osm2,"");
+}
+
+function update_osm2(text) {
+rights = JSON.parse(text);
+access_ok = true;
+for (var j = 0; j < (rights.apis).length; j++)
+   {
+     if (rights.apis[j].apiid=="41") {
+        if (rights.apis[j].permissions.empty=="true")
+        {
+          access_ok = false;
+        } else
+        {
+          if (rights.apis[j].permissions.member==0) {
+            access_ok = false;
+          } 
+         if (rights.apis[j].permissions.events==0) {
+            access_ok = false;
+          }
+        }
+     }
+  }
+   update_events2();
+} 
+
+
+function parse_members(text) {
+members =JSON.parse(text);
+}
+
+function get_members_det(text) {
+event_structure = JSON.parse(text);
+url = "https://www.onlinescoutmanager.co.uk/ext/members/contact/grid/?action=getMembers"
+parameters = [];
+parameters['section_id'] =$(".section-select").val();
+parameters['term_id'] = $(".term-select").val();
+do_xhr_post(url,parse_members,parameters)
+}
+
+function get_event_struc(text) {
+attendance = JSON.parse(text);
+url = "https://www.onlinescoutmanager.co.uk/ext/events/event/?action=getStructureForEvent&eventid="+$(".event-select").val()+"&sectionid="+$(".section-select").val();
+do_xhr(url,get_members_det,"");
+}
+
+
+
+function compare(a, b) {
+  // Use toUpperCase() to ignore character casing
+  const bandA = a.manual_category.toUpperCase();
+  const bandB = b.manual_category.toUpperCase();
+
+  let comparison = 0;
+  if (bandA > bandB) {
+    comparison = 1;
+  } else if (bandA < bandB) {
+    comparison = -1;
+  }
+  return comparison;
+}
+
+
+function get_ra(text){
+$(".docs2").text($(".section-select option:selected").text()+":"+$(".event-select option:selected").text());
+$(".docs").text("");
+event_ra = JSON.parse(text);
+table="<table><tr><th width='25%'>Hazard Identified?<br>Risks from it?</th><th width='25%'>Who is at risk?</th><th width='25%'>How are the risks already controlled?<br>What extra controls are needed?</th><th width='25%'>What has changed that needs to be thought about and controlled?</th></tr>"
+event_ra.data.sort(compare);
+for (i=0;i<event_ra.data.length;i++) {
+ if(i==0||event_ra.data[i-1].manual_category!=event_ra.data[i].manual_category){
+table=table+"<tr><td colspan='4'><b>"+event_ra.data[i].manual_category+"</b></td></tr>"
+}
+ table=table+"<tr><td>"+event_ra.data[i].manual_hazard+"</td><td>"+event_ra.data[i].who+"</td><td>"+event_ra.data[i].controls+"</td><td>"+event_ra.data[i].check+"</td></tr>"
+}
+table=table+"</table>";
+//$(".ra_table").html(table);
+$(".ra_table").text((event_ra.data.length)+" Risk items loaded");
+url="https://www.onlinescoutmanager.co.uk/ext/events/event/?action=getAttendance&eventid="+ $(".event-select").val()+"&sectionid="+ $(".section-select").val()+"&termid="+ $(".term-select").val()
+do_xhr(url,get_event_struc,"");
+}
+
+function update_builder() {
+//Get Details of the Event RA
+var section_id = $(".section-select").val();
+if ($("#pdf_viewer").is(":visible")) { $("#pdf_viewer").toggle("slow");}
+if(!access_ok) {$(".docs2").text("You do not have sufficient access to this section")}
+if (access_ok) {
+if (!($("#event_selected_grid").is(":visible"))) { $("#event_selected_grid").toggle("slow");}
+url="https://www.onlinescoutmanager.co.uk/ext/risk_assessments/?action=getRiskAssessment&section_id="+section_id+"&type=event&associated_id="+$(".event-select").val();
+ do_xhr(url,get_ra,"");
+}
+}
+
+function log_off() {
+security = null;
+$("#osmr_loggedon").toggle("slow");
+$("#osmr_logon").toggle("slow");
+$(".osmr_builder").toggle();
+
+}
+
+function nothing(text)
+{
+//alert(text);
+}
+
+function update_osm()
+{
+var url = 'https://www.2ndnewhawscouts.org.uk/osmr/osmrelay.php?osmpath=ext/settings/access/&action=getAPIAccess&sectionid='+$(".docs2").attr("id");
+do_xhr(url,update_osm2,"");
+}
+function print_ra() {
+  var printsec = false;
+  var missingdata = false;
+  var pdf_doc = new Object;
+var today = new Date();
+      var dd = today.getDate();
+      var mm = today.getMonth()+1; //January is 0!
+      var yyyy = today.getFullYear();
+      
+if (!($("#pdf_viewer").is(":visible"))) { $("#pdf_viewer").toggle("slow");}
+      var pdf_header = new Object;
+      pdf_header.text = '\n Extracted from Online Scout Manager on '+dd+"."+mm+"."+yyyy;
+      pdf_header.alignment = "center";
+  //    pdf_header.margin = [20,0,0,0];
+      pdf_doc.header = pdf_header;
+   pdf_doc.pageSize = "A4";
+pdf_doc.pageOrientation = "landscape";
+
+  pdf_doc.styles = {
+header:{
+fontSize: 18,
+			bold: true,
+			margin: [0, 0, 0, 10]
+		},
+		subheader: {
+			fontSize: 16,
+			bold: true,
+			margin: [0, 10, 0, 5]
+		},
+		tableExample: { 
+                        fontSize: 8,	
+			margin: [0, 5, 0, 15]
+		},
+		tableHeader: {
+			bold: true,
+			fontSize: 13,
+			color: 'black'
+		}
+	}
+  pdf_doc.defaultStyle = {
+		// alignment: 'justify'
+	} 		;
+  pdf_doc.content = [];
+  
+if($('#ra').is(":checked")) {
+  printsec = true;
+  var pdf_table = new Object ;
+  pdf_table.table = new Object;
+  pdf_table.table.headerRows = 1;
+  pdf_table.table.body = new Array;
+  var table_row = new Array;  
+   table_row=[];
+  table_row.push("Hazard Identified?\nRisks from it?");
+
+  table_row.push("Who is at risk?");
+
+  table_row.push("How are the risks already controlled?\nWhat extra controls are needed?	");
+
+  table_row.push("What has changed that needs to be thought about and controlled?");
+      
+      pdf_table.table.body.push(table_row);
+//  for (i=0;i<event_ra.data.length;i++) {
+  
+ // var num = $(".connectedSortable").size();
+
+for (i=0;i<event_ra.data.length;i++) {
+
+table_row = [];
+ if(i==0||event_ra.data[i-1].manual_category!=event_ra.data[i].manual_category){
+var pdf_table_cell = new Object;
+               pdf_table_cell.text = event_ra.data[i].manual_category
+               pdf_table_cell.colSpan =  4;
+               pdf_table_cell.fillColor= '#eeeeee';
+               table_row.push(pdf_table_cell);
+pdf_table.table.body.push(table_row);
+}
+ table_row = [];
+ var pdf_table_cell = new Object;
+ pdf_table_cell.text = event_ra.data[i].manual_hazard
+ table_row.push(pdf_table_cell);
+var pdf_table_cell = new Object;
+ pdf_table_cell.text = event_ra.data[i].who
+ table_row.push(pdf_table_cell);
+var pdf_table_cell = new Object;
+ pdf_table_cell.text = event_ra.data[i].controls
+ table_row.push(pdf_table_cell);
+var pdf_table_cell = new Object;
+ pdf_table_cell.text = event_ra.data[i].check
+ table_row.push(pdf_table_cell); 
+pdf_table.table.body.push(table_row);
+}
+ pdf_create = {}; pdf_create.text= $(".docs2").text();
+pdf_create.style = "subheader";
+pdf_doc.content.push(pdf_create);
+pdf_doc.content.push(pdf_table); 
+if (event_ra.data.length==0) {
+pdf_create = {};
+pdf_create.style="header";
+pdf_create.text= "\nNo Risk Assessment maintained";
+pdf_doc.content.push(pdf_create);
+
+}
+}
+
+if($('#att').is(":checked")){
+
+
+pdf_create = {};
+pdf_create.text= "Attending "+$(".event-select option:selected").text()+"\n";
+pdf_create.style="header";
+if(printsec) {
+pdf_create.pageOrientation = "portrait";
+pdf_create.pageBreak = "before";
+}else
+{
+pdf_doc.pageOrientation = "portrait";
+}
+printsec = true;
+pdf_doc.content.push(pdf_create);
+for(var i=0;i<2;i++) {
+pdf_create = {};
+pdf_create.style="header";
+if (i==0) {
+pdf_create.text= "Leaders";
+} else { pdf_create.text= "Members";}
+pdf_doc.content.push(pdf_create);
+
+for(property=0; property<attendance.items.length; property++) {
+     if(attendance.items[property].attending=="Yes"){
+pdf_create = {};
+
+pdf_create.text= attendance.items[property].firstname+" "+attendance.items[property].lastname
+if (i==0&&attendance.items[property].patrolid==-2) {
+pdf_doc.content.push(pdf_create);
+
+}
+if (i==1&&attendance.items[property].patrolid!=-2) {
+pdf_doc.content.push(pdf_create);
+
+}
+
+
+}
+}
+}
+}
+if($('#contact').is(":checked")) {
+
+
+pdf_create = {};
+pdf_create.text= "Contact Details for "+$(".event-select option:selected").text()+"\n";
+pdf_create.style="header";
+if(printsec) {
+pdf_create.pageOrientation = "landscape";
+pdf_create.pageBreak = "before";
+}else
+{
+pdf_doc.pageOrientation = "landscape";
+}
+printsec = true;
+pdf_doc.content.push(pdf_create);
+var pdf_tablec = new Object ;
+pdf_tablec.style = "tableExample";
+pdf_tablec.layout = {};
+pdf_tablec.layout.fillColor  = function (rowIndex, node, columnIndex) {
+					return (rowIndex % 2 === 0) ? '#CCCCCC' : null;
+				}
+pdf_tablec.table = new Object;
+  pdf_tablec.table.headerRows = 1;
+  pdf_tablec.table.body = new Array;
+  var table_row = new Array;  
+   table_row=[];
+table_row.push("Name");
+table_row.push("Contact 1");
+table_row.push("Phone 1");
+table_row.push("Phone 2");
+table_row.push("Contact 2");
+table_row.push("Phone 1");
+table_row.push("Phone 2");
+table_row.push("Emergency");
+table_row.push("Phone 1");
+table_row.push("Phone 2");
+pdf_tablec.table.body.push(table_row);
+for(property=0; property<attendance.items.length; property++) {
+     if(attendance.items[property].attending=="Yes"){
+    scout = attendance.items[property].scoutid;
+   if (members.data.hasOwnProperty(scout)) {
+     table_row=[]
+     table_row.push(members.data[scout].first_name+" "+members.data[scout].last_name);
+     thisrecord = members.data[scout].custom_data;
+     if (thisrecord.hasOwnProperty("1")) {
+     if (thisrecord[1].hasOwnProperty("2")&&thisrecord[1].hasOwnProperty("3")) {
+     table_row.push(members.data[scout].custom_data[1][2] + " " + members.data[scout].custom_data[1][3] )
+     } else {table_row.push("Not Available");missingdata =true; }
+     if (thisrecord[1].hasOwnProperty("18")) {table_row.push(members.data[scout].custom_data[1][18]) } else {table_row.push("");missingdata =true;}
+     if (thisrecord[1].hasOwnProperty("20")) {table_row.push(members.data[scout].custom_data[1][20]) } else {table_row.push("");missingdata =true;}
+     } else
+     {
+var pdf_table_cell = new Object;
+       pdf_table_cell.text= "Not available";missingdata =true;
+       pdf_table_cell.colSpan =  3;
+       pdf_table_cell.fillColor= '#eeeeee';
+       table_row.push(pdf_table_cell);
+}
+      if (thisrecord.hasOwnProperty("2")) {
+     if (thisrecord[2].hasOwnProperty("2")&&thisrecord[2].hasOwnProperty("3")) {
+     table_row.push(members.data[scout].custom_data[2][2]+" "+members.data[scout].custom_data[2][3]) }
+     else {table_row.push("Not Available"); missingdata =true; }
+    if (thisrecord[2].hasOwnProperty("18")) {table_row.push(members.data[scout].custom_data[2][18]) } else {table_row.push("");}
+     if (thisrecord[2].hasOwnProperty("20")) {table_row.push(members.data[scout].custom_data[2][20]) } else {table_row.push("");}
+      }
+     else {
+var pdf_table_cell = new Object;
+       pdf_table_cell.text= "Not available"; missingdata =true;
+       pdf_table_cell.colSpan =  3;
+       pdf_table_cell.fillColor= '#eeeeee';
+       table_row.push(pdf_table_cell);
+
+}
+     if (thisrecord.hasOwnProperty("3")) {
+      if (thisrecord[3].hasOwnProperty("2")&&thisrecord[3].hasOwnProperty("3")) {
+
+table_row.push(members.data[scout].custom_data[3][2]+" "+members.data[scout].custom_data[3][3]) } else {table_row.push("Not Available"); missingdata =true;}
+
+     if (thisrecord[3].hasOwnProperty("18")) {table_row.push(members.data[scout].custom_data[3][18]) } else {table_row.push("");missingdata =true;}
+     if (thisrecord[3].hasOwnProperty("20"))	 {table_row.push(members.data[scout].custom_data[3][20]) } else {table_row.push("");missingdata =true;}
+      }
+     else { 
+var pdf_table_cell = new Object;
+       pdf_table_cell.text= "Not available";missingdata =true;
+       pdf_table_cell.colSpan =  3;
+       pdf_table_cell.fillColor= '#eeeeee';
+       table_row.push(pdf_table_cell);
+}
+
+     pdf_tablec.table.body.push(table_row);
+     } else {
+       var pdf_table_cell = new Object;
+       pdf_table_cell.text= attendance.items[property].firstname+" "+attendance.items[property].lastname+" details are not available";missingdata =true;
+       pdf_table_cell.colSpan =  10;
+       pdf_table_cell.fillColor= '#eeeeee';
+       table_row = [];
+       table_row.push(pdf_table_cell);
+pdf_tablec.table.body.push(table_row);
+
+
+
+     }
+  }
+}
+pdf_doc.content.push(pdf_tablec);     
+}
+
+if($('#health').is(":checked")) {
+
+
+pdf_create = {};
+pdf_create.text= "Health Sheet for "+$(".event-select option:selected").text()+"\n";
+pdf_create.style="header";
+if(printsec) {
+pdf_create.pageOrientation = "portrait";
+pdf_create.pageBreak = "before";
+}else
+{
+pdf_doc.pageOrientation = "portrait";
+}
+printsec = true;
+var rowsprinted  = 0;
+pdf_doc.content.push(pdf_create);
+var pdf_tableh = new Object ;
+pdf_tableh.style = "tableExample";
+
+pdf_tableh.table = new Object;
+   pdf_tableh.table.body = new Array;
+  var table_row = new Array;  
+if (Object.keys(members.data).length>0) {
+   var checkscout = Object.keys(members.data)[0];
+   if (members.data[checkscout].custom_data.hasOwnProperty("9"))
+   {
+     var healthobj = true;
+     if (members.data[checkscout].custom_data[9].hasOwnProperty("24253")) { var medicalobj=true } 
+     else { var medicalobj=false;
+     pdf_create = {};
+     pdf_create.text= "Medical Data is not available";
+     pdf_doc.content.push(pdf_create); missingdata =true;
+     }
+     if (members.data[checkscout].custom_data[9].hasOwnProperty("24254")) { var allergyobj=true } 
+     else { var allergyobj=false;
+     pdf_create = {};
+     pdf_create.text= "Allergy Data is not available";
+     pdf_doc.content.push(pdf_create);missingdata =true;
+
+     }
+     if (members.data[checkscout].custom_data[9].hasOwnProperty("24255")) { var dietobj=true } 
+     else { var dietobj=false;
+     pdf_create = {};
+     pdf_create.text= "Dietary Data is not available";
+     pdf_doc.content.push(pdf_create);missingdata =true;
+
+     }
+     if (members.data[checkscout].custom_data[9].hasOwnProperty("24257")) { var otherobj=true } 
+     else { var otherobj=false;
+     pdf_create = {};
+     pdf_create.text= "Other medical data is not available";
+     pdf_doc.content.push(pdf_create);missingdata =true;
+
+     }
+   } else {
+     pdf_create = {};
+     pdf_create.text= "Health Data is not available"; missingdata =true;
+     pdf_create.style="header";
+     pdf_doc.content.push(pdf_create);
+     var healthobj = false;
+   }
+}  
+if (healthobj) {
+for(property=0; property<attendance.items.length; property++) {
+     if(attendance.items[property].attending=="Yes"){
+     rowsprinted = rowsprinted + 1;
+    scout = attendance.items[property].scoutid;
+   if (members.data.hasOwnProperty(scout)) {
+    table_row=[];
+    printmembername = false;
+    if (medicalobj) {if (members.data[scout].custom_data[9][24253]!="") {printmembername = true}}
+    if (dietobj) {if (members.data[scout].custom_data[9][24255]!="") {printmembername = true}}
+    if (allergyobj) {if (members.data[scout].custom_data[9][24254]!="") {printmembername = true}} 
+    if (otherobj) {if (members.data[scout].custom_data[9][24257]!="") {printmembername = true}}
+    if (printmembername) {
+      var pdf_table_cell = new Object;
+      pdf_table_cell.text = members.data[scout].first_name+" "+members.data[scout].last_name;
+      pdf_table_cell.fillColor= '#eeeeee';
+      table_row.push(pdf_table_cell);
+      table_row.push(pdf_table_cell);
+      pdf_tableh.table.body.push(table_row);
+      if (medicalobj) {
+      if (members.data[scout].custom_data[9][24253]!="") {
+        table_row=[]
+        table_row.push("Medical")
+        table_row.push(members.data[scout].custom_data[9][24253])
+        pdf_tableh.table.body.push(table_row);
+       }
+      }
+      if (allergyobj) {
+      if (members.data[scout].custom_data[9][24254]!="") {
+        table_row=[]
+        table_row.push("Allergy")
+        table_row.push(members.data[scout].custom_data[9][24254])
+        pdf_tableh.table.body.push(table_row);
+       }
+       }
+       if (dietobj) {
+       if (members.data[scout].custom_data[9][24255]!="") {
+        table_row=[]
+        table_row.push("Diet")
+        table_row.push(members.data[scout].custom_data[9][24255])
+        pdf_tableh.table.body.push(table_row);
+       }
+       } 
+       if (otherobj) {
+       if (members.data[scout].custom_data[9][24257]!="") {
+        table_row=[]
+        table_row.push("Other")
+        table_row.push(members.data[scout].custom_data[9][24257])
+        pdf_tableh.table.body.push(table_row);
+       } 
+      }
+    } else { var pdf_table_cell = new Object;
+      pdf_table_cell.text = members.data[scout].first_name+" "+members.data[scout].last_name;
+      pdf_table_cell.fillColor= '#eeeeee';
+      table_row.push(pdf_table_cell);
+      var pdf_table_cell = new Object;
+      pdf_table_cell.text = "No Health issues recorded"
+      pdf_table_cell.fillColor= '#eeeeee';
+      table_row.push(pdf_table_cell);
+      pdf_tableh.table.body.push(table_row);
+ }
+   }
+  }
+ }
+}
+if (rowsprinted>0) {
+pdf_doc.content.push(pdf_tableh);
+} else
+{
+if (healthobj) {
+pdf_create = {};
+pdf_create.text= "No Attendees";
+pdf_doc.content.push(pdf_create);
+}
+}  
+}
+if($('#plan').is(":checked")) {
+
+
+pdf_create = {};
+pdf_create.text= "Event Plan for "+$(".event-select option:selected").text()+"\n";
+pdf_create.style="header";
+if(printsec) {
+pdf_create.pageOrientation = "portrait";
+pdf_create.pageBreak = "before";
+}else
+{
+pdf_doc.pageOrientation = "portrait";
+}
+printsec = true;
+
+pdf_doc.content.push(pdf_create);
+pdf_create = {};
+pdf_create =  htmlToPdfmake(event_structure.notepad);
+pdf_doc.content.push(pdf_create);
+}
+//pdf_doc.content.push(pdf_table);
+
+var pdf_footer = function(currentPage, pageCount) {  return {text: currentPage.toString() + ' of ' + pageCount, alignment: 'center'}; };
+      pdf_doc.footer = pdf_footer;
+
+//pdfMake.createPdf(pdf_doc).download(); 
+if(missingdata) {
+if (!($(".doc3").is(":visible"))) {$(".doc3").toggle("slow");}
+} else
+{
+if (($(".doc3").is(":visible"))) {$(".doc3").toggle("slow");}
+}
+if($('#down').is(":checked")) {
+pdfMake.createPdf(pdf_doc).download();
+} else
+{
+pdfMake.createPdf(pdf_doc).getDataUrl(function(outDoc) {
+                $("#pdf_viewer").attr("src", outDoc);
+                });
+}
+
+}
+
+  </script>
+</head>
+<body>
+<div class="osmr_toolbar">
+<span style="font-size:30px">Online Scout Manager Print Event RA</span>
+<div id="osmr_logon"><span id="username_block">Username: <input type="text" name="username" id="username"></span>
+<span id="password_block">Password: <input type="password" name="password" id="password">
+<button type="button" onclick="call_report()" id="logon_button">Log On</button></span></div>
+<div id="osmr_loggedon">
+<button type="button" onclick="log_off()" id="logoff_button">Log Off</button>
+<span>Section: <select class="section-select"><option></option></select></span>
+<span>Term: <select class="term-select"><option></option></select></span>
+<span>Event: <select class="event-select"></select></span>
+<button type="button" onclick="update_builder()" id="go_button">Go!</button></span></div>
+
+</div>
+</div>
+<div class="osmr_builder">
+<div>
+<h3 class="docs2"></h3>
+<h3 class="docs">Make Your Selections above and then press Go!</h3><br>
+<h3 class="doc3" style="display:none">Some data may be missing - check you settings for Grid view in Settings->Section settings->Personal Details Fields->Field Visibiliy</h3><br>
+
+<div class="ra_table">
+First time of use? Login to OSM and make sure under Settings->My Account Details->External Access the API called OSMR has read access to your members and events 
+</div>
+<div id="event_selected_grid" style="display:none">
+<button type="button" onclick="print_ra();">Generate Event Documentation</button><br>
+<input type="checkbox" id="ra" name="ra" value="ra" checked>
+  <label for="ra">Risk Assessment</label><br>
+  <input type="checkbox" id="att" name="att" value="att" checked>
+  <label for="att"> Attendance List</label><br>
+  <input type="checkbox" id="contact" name="contact" value="contact" checked>
+  <label for="contact">Contact List</label><br>
+  <input type="checkbox" id="health" name="health" value="health" checked>
+  <label for="health">Health Details</label><br>
+  <input type="checkbox" id="plan" name="plan" value="plan" checked>
+  <label for="plan">Event Plan</label><br>
+<input type="checkbox" id="down" name="down" value="down">
+  <label for="down">Download rather than preview</label><br>
+
+<!--
+<button type="button" onclick="update_osm();">Share</button>-->
+</div>
+</div>
+<iframe id="pdf_viewer" width=100% style ="min-width: 700px; height: 800px;display:none;"><iframe> 
+</div>
+</body>
+</html>
