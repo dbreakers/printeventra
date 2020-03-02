@@ -12,8 +12,8 @@ $path = http_build_query($parameters);
 
 // Insert Yours here 
 
-$_POST['apiid'] = 'XX';
-$_POST['token'] = 'YYYYYYYYYYYYYYYYYYYYYYY';
+$_POST['apiid'] = '41';
+$_POST['token'] = 'ce3dc1dc772c059e13e615d698b81a8b';
 
 
 curl_setopt($ch, CURLOPT_URL, 'https://www.onlinescoutmanager.co.uk/'.$path_add.'?'.$path);
